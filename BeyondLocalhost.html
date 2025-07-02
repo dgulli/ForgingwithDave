@@ -94,6 +94,10 @@
             display: inline-block;
             border: 2px solid #ee9b00;
         }
+        pre {
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
     </style>
 </head>
 <body class="text-gray-300">
@@ -101,7 +105,7 @@
 
         <header class="text-center mb-16">
             <h1 class="text-4xl md:text-6xl font-black text-transparent bg-clip-text bg-gradient-to-r from-[#94d2bd] to-[#ee9b00]">Beyond Localhost</h1>
-            <p class="text-lg md:text-xl text-gray-400 mt-4 max-w-3xl mx-auto">A Visual Guide to Secure ADK & Cloud Run Authentication on GCP</p>
+            <p class="text-lg md:text-xl text-gray-400 mt-4 max-w-3xl mx-auto">ADK & Cloud Run Authentication: From Development to Production on GCP</p>
         </header>
 
         <section class="mb-16">
@@ -139,36 +143,36 @@
                 <div class="flow-step">
                     <div class="flow-number">2</div>
                     <div>
-                        <h4 class="font-bold text-lg text-[#94d2bd]">Token Generation</h4>
-                        <p class="text-gray-400">The agent's code requests a Google-signed OIDC ID Token, specifying the tool's URL as the unique `audience`.</p>
+                        <h4 class="font-bold text-lg text-[#94d2bd]">Identity Token Generation</h4>
+                        <p class="text-gray-400">The agent impersonates a service account to obtain a Google-signed OIDC identity token with the Cloud Run service URL as the audience.</p>
                     </div>
                 </div>
                 <div class="flow-step">
                     <div class="flow-number">3</div>
                     <div>
                         <h4 class="font-bold text-lg text-[#94d2bd]">Authenticated Request</h4>
-                        <p class="text-gray-400">The agent sends its request to the tool, including the token in the `Authorization: Bearer <TOKEN>` header.</p>
+                        <p class="text-gray-400">The agent sends its request to the Cloud Run service, including the identity token in the `Authorization: Bearer <TOKEN>` header.</p>
                     </div>
                 </div>
                 <div class="flow-step">
                     <div class="flow-number">4</div>
                     <div>
-                        <h4 class="font-bold text-lg text-[#94d2bd]">Token Validation</h4>
-                        <p class="text-gray-400">Cloud Run's frontend intercepts the request, validates the token's signature, and confirms its `audience` matches the service URL.</p>
+                        <h4 class="font-bold text-lg text-[#94d2bd]">Cloud Run Authentication</h4>
+                        <p class="text-gray-400">Cloud Run validates the token's signature, confirms the audience matches the service URL, and checks IAM permissions for the service account.</p>
                     </div>
                 </div>
                 <div class="flow-step">
                     <div class="flow-number">5</div>
                     <div>
-                        <h4 class="font-bold text-lg text-[#94d2bd]">IAM Authorization</h4>
-                        <p class="text-gray-400">Cloud Run checks if the agent's identity (from the token) has the required `run.invoker` permission in its IAM policy.</p>
+                        <h4 class="font-bold text-lg text-[#94d2bd]">MCP Tool Execution</h4>
+                        <p class="text-gray-400">Once authorized, the MCP toolbox executes the requested operation using its own authentication to access Google Cloud services like Spanner.</p>
                     </div>
                 </div>
                 <div class="flow-step">
                     <div class="flow-number" style="background-color: #ee9b00; border-color: #ca6702;">6</div>
                     <div>
-                        <h4 class="font-bold text-lg text-[#ee9b00]">Access Granted/Denied</h4>
-                        <p class="text-gray-400">If all checks pass, the request proceeds. If not, Cloud Run returns a `403 Forbidden` error, and the tool is never reached.</p>
+                        <h4 class="font-bold text-lg text-[#ee9b00]">Response or Denial</h4>
+                        <p class="text-gray-400">If all authentication succeeds, results are returned. If not, Cloud Run returns a `403 Forbidden` error before the tool is reached.</p>
                     </div>
                 </div>
             </div>
@@ -260,26 +264,27 @@
             <h2 class="text-3xl font-bold text-center mb-12 text-[#94d2bd]">Implementation Highlights</h2>
             <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
                 <div class="bg-gray-800 rounded-lg shadow-lg p-6 border-t-4 border-[#94d2bd]">
-                    <h3 class="text-xl font-bold text-[#94d2bd] mb-2">Authenticated Call</h3>
-                    <p class="text-gray-400 mb-4">In the agent's Python code, explicitly fetching a token with the correct `audience` is the most critical step for security.</p>
-                    <pre class="bg-gray-900 text-sm p-3 rounded-md text-gray-300"><code>id_token.fetch_id_token(
-  auth_req, 
-  <span class="font-bold text-[#ae2012]">MCP_TOOLBOX_URL</span>
-)</code></pre>
+                    <h3 class="text-xl font-bold text-[#94d2bd] mb-2">Identity Token with Audience</h3>
+                    <p class="text-gray-400 mb-4">The agent obtains identity tokens specifically scoped to the Cloud Run service URL as the audience.</p>
+                    <pre class="bg-gray-900 text-sm p-3 rounded-md text-gray-300"><code>gcloud auth print-identity-token \
+  --audiences <span class="font-bold text-[#ae2012]">CLOUD_RUN_URL</span> \
+  --impersonate-service-account \
+  mcp-agent-sa@project.iam.gserviceaccount.com</code></pre>
                 </div>
                 <div class="bg-gray-800 rounded-lg shadow-lg p-6 border-t-4 border-[#ee9b00]">
-                    <h3 class="text-xl font-bold text-[#ee9b00] mb-2">Secure Deployment</h3>
-                    <p class="text-gray-400 mb-4">When deploying the Cloud Run tool, locking down ingress is a simple but powerful command-line flag.</p>
-                     <pre class="bg-gray-900 text-sm p-3 rounded-md text-gray-300"><code>gcloud run deploy ... \
-  <span class="font-bold text-[#ae2012]">--ingress=internal</span></code></pre>
+                    <h3 class="text-xl font-bold text-[#ee9b00] mb-2">Authenticated Cloud Run</h3>
+                    <p class="text-gray-400 mb-4">Deploy the toolbox with authentication required, ensuring only authorized service accounts can access it.</p>
+                     <pre class="bg-gray-900 text-sm p-3 rounded-md text-gray-300"><code>gcloud run deploy toolbox \
+  <span class="font-bold text-[#ae2012]">--no-allow-unauthenticated</span> \
+  --port=5000</code></pre>
                 </div>
                 <div class="bg-gray-800 rounded-lg shadow-lg p-6 border-t-4 border-[#0a9396]">
-                    <h3 class="text-xl font-bold text-[#0a9396] mb-2">Assigning Identity</h3>
-                    <p class="text-gray-400 mb-4">When creating the agent, you must attach the dedicated service account you created to act as its identity.</p>
-                     <pre class="bg-gray-900 text-sm p-3 rounded-md text-gray-300"><code>ReasoningEngine.create(
-  ...,
-  <span class="font-bold text-[#ae2012]">service_account=...</span>
-)</code></pre>
+                    <h3 class="text-xl font-bold text-[#0a9396] mb-2">IAM Permission Binding</h3>
+                    <p class="text-gray-400 mb-4">Grant the agent's service account the Cloud Run Invoker role to authorize access to the service.</p>
+                     <pre class="bg-gray-900 text-sm p-3 rounded-md text-gray-300"><code>gcloud run services add-iam-policy-binding \
+  toolbox --member=serviceAccount:\
+  <span class="font-bold text-[#ae2012]">mcp-agent-sa@project.iam.gserviceaccount.com</span> \
+  --role=roles/run.invoker</code></pre>
                 </div>
             </div>
         </section>
@@ -291,7 +296,7 @@
                     <span class="text-3xl mr-4">🎯</span>
                     <div>
                         <h4 class="font-bold text-gray-200">1. Cloud Run Service</h4>
-                        <p class="text-sm text-gray-400">Is the service deployed successfully with `ingress: internal`?</p>
+                        <p class="text-sm text-gray-400">Is the service deployed with authentication required (`--no-allow-unauthenticated`)?</p>
                     </div>
                  </div>
                  <div class="flex items-start p-4 bg-gray-700 rounded-lg">
@@ -304,33 +309,35 @@
                  <div class="flex items-start p-4 bg-gray-700 rounded-lg">
                     <span class="text-3xl mr-4">🤖</span>
                     <div>
-                        <h4 class="font-bold text-gray-200">3. Agent Deployment</h4>
-                        <p class="text-sm text-gray-400">Is the agent running with the correct user-managed service account?</p>
+                        <h4 class="font-bold text-gray-200">3. Agent Identity</h4>
+                        <p class="text-sm text-gray-400">Is the agent using service account impersonation to generate identity tokens?</p>
                     </div>
                  </div>
                  <div class="flex items-start p-4 bg-gray-700 rounded-lg">
                     <span class="text-3xl mr-4">🏷️</span>
                     <div>
-                        <h4 class="font-bold text-gray-200">4. Token Claims</h4>
-                        <p class="text-sm text-gray-400">Does the generated ID token have the correct `audience` and `issuer`?</p>
+                        <h4 class="font-bold text-gray-200">4. Token Audience</h4>
+                        <p class="text-sm text-gray-400">Are identity tokens generated with the Cloud Run URL as the audience?</p>
                     </div>
                  </div>
                  <div class="flex items-start p-4 bg-gray-700 rounded-lg">
                     <span class="text-3xl mr-4">🌐</span>
                     <div>
-                        <h4 class="font-bold text-gray-200">5. Network Path</h4>
-                        <p class="text-sm text-gray-400">Is VPC Egress configured for the agent and Private Google Access enabled?</p>
+                        <h4 class="font-bold text-gray-200">5. Backend Services</h4>
+                        <p class="text-sm text-gray-400">Does the service account have appropriate permissions for backend resources (Spanner, etc.)?</p>
                     </div>
                  </div>
                   <div class="flex items-start p-4 bg-green-900 bg-opacity-30 rounded-lg border border-green-500">
                     <span class="text-3xl mr-4">✅</span>
                     <div>
                         <h4 class="font-bold text-green-300">All Checks Pass</h4>
-                        <p class="text-sm text-green-400">Congratulations, you have a secure, production-grade connection!</p>
+                        <p class="text-sm text-green-400">Secure authentication flow from Agent Engine to Cloud Run and backend services</p>
                     </div>
                  </div>
              </div>
         </section>
+
+
 
     </main>
     <script>
