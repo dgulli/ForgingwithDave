@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Beyond Localhost: Secure ADK & Cloud Run Auth on GCP</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;900&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #111827; /* Dark background */
+        }
+        .chart-container {
+            position: relative;
+            width: 100%;
+            max-width: 600px;
+            margin-left: auto;
+            margin-right: auto;
+            height: 300px;
+            max-height: 400px;
+        }
+        @media (min-width: 768px) {
+            .chart-container {
+                height: 350px;
+            }
+        }
+        .flow-step {
+            display: flex;
+            align-items: center;
+            margin-bottom: 1rem;
+            position: relative;
+            padding-bottom: 2rem;
+        }
+        .flow-step:not(:last-child)::after {
+            content: '↓';
+            position: absolute;
+            bottom: 0;
+            left: 1.625rem;
+            transform: translateX(-50%);
+            font-size: 1.5rem;
+            color: #94d2bd; /* Lighter arrow for dark mode */
+            font-weight: 900;
+        }
+        .flow-number {
+            width: 3.25rem;
+            height: 3.25rem;
+            min-width: 3.25rem;
+            border-radius: 9999px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 900;
+            font-size: 1.5rem;
+            margin-right: 1.5rem;
+            color: #111827;
+            background-color: #94d2bd;
+            border: 4px solid #0a9396;
+        }
+        .iam-diagram-arrow {
+            position: relative;
+            padding: 0.5rem 0;
+            text-align: center;
+            font-weight: 600;
+            font-size: 0.875rem;
+            color: #ee9b00;
+        }
+        .iam-diagram-arrow::before, .iam-diagram-arrow::after {
+            content: '';
+            position: absolute;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 2px;
+            background-color: #ca6702;
+        }
+        .iam-diagram-arrow::before {
+            top: 0;
+            height: 0.5rem;
+        }
+        .iam-diagram-arrow::after {
+            bottom: 0;
+            height: 0.5rem;
+        }
+        .iam-role-box {
+            background-color: #ca6702;
+            color: #ffffff;
+            padding: 0.25rem 0.75rem;
+            border-radius: 9999px;
+            font-size: 0.75rem;
+            font-weight: 700;
+            display: inline-block;
+            border: 2px solid #ee9b00;
+        }
+    </style>
+</head>
+<body class="text-gray-300">
+    <main class="container mx-auto p-4 md:p-8 max-w-7xl">
+
+        <header class="text-center mb-16">
+            <h1 class="text-4xl md:text-6xl font-black text-transparent bg-clip-text bg-gradient-to-r from-[#94d2bd] to-[#ee9b00]">Beyond Localhost</h1>
+            <p class="text-lg md:text-xl text-gray-400 mt-4 max-w-3xl mx-auto">A Visual Guide to Secure ADK & Cloud Run Authentication on GCP</p>
+        </header>
+
+        <section class="mb-16">
+            <h2 class="text-3xl font-bold text-center mb-8 text-[#94d2bd]">The Architecture: Key Players</h2>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-8 text-center">
+                <div class="bg-gray-800 rounded-lg shadow-lg p-6">
+                    <div class="text-5xl mb-4">🤖</div>
+                    <h3 class="text-xl font-bold text-[#94d2bd]">The Agent</h3>
+                    <p class="text-gray-400">An AI Agent built with the ADK, running on the serverless <strong>Vertex AI Agent Engine</strong>. It initiates requests to fulfill user queries.</p>
+                </div>
+                <div class="bg-gray-800 rounded-lg shadow-lg p-6">
+                    <div class="text-5xl mb-4">🛡️</div>
+                    <h3 class="text-xl font-bold text-[#94d2bd]">The Tool</h3>
+                    <p class="text-gray-400">A backend service (e.g., MCP Toolbox) deployed on <strong>Cloud Run</strong>. This protected resource requires strict authentication to be accessed.</p>
+                </div>
+                <div class="bg-gray-800 rounded-lg shadow-lg p-6">
+                    <div class="text-5xl mb-4">🔑</div>
+                    <h3 class="text-xl font-bold text-[#94d2bd]">The Gatekeeper</h3>
+                    <p class="text-gray-400"><strong>Google Cloud IAM</strong> acts as the identity provider and authorization engine. It issues and verifies identity tokens, granting or denying access based on pre-defined roles.</p>
+                </div>
+            </div>
+        </section>
+        
+        <section class="mb-16 bg-gray-800 rounded-lg shadow-2xl p-6 md:p-10">
+            <h2 class="text-3xl font-bold text-center mb-12 text-[#94d2bd]">The Authentication Handshake</h2>
+            <p class="text-center max-w-2xl mx-auto text-gray-400 mb-12">For an agent to securely access a tool, it must complete a precise, token-based authentication flow. Every step is critical to ensure only authorized identities can communicate.</p>
+            <div class="max-w-xl mx-auto">
+                <div class="flow-step">
+                    <div class="flow-number">1</div>
+                    <div>
+                        <h4 class="font-bold text-lg text-[#94d2bd]">Agent Invocation</h4>
+                        <p class="text-gray-400">A user prompt triggers the agent, which determines it needs to call the external tool.</p>
+                    </div>
+                </div>
+                <div class="flow-step">
+                    <div class="flow-number">2</div>
+                    <div>
+                        <h4 class="font-bold text-lg text-[#94d2bd]">Token Generation</h4>
+                        <p class="text-gray-400">The agent's code requests a Google-signed OIDC ID Token, specifying the tool's URL as the unique `audience`.</p>
+                    </div>
+                </div>
+                <div class="flow-step">
+                    <div class="flow-number">3</div>
+                    <div>
+                        <h4 class="font-bold text-lg text-[#94d2bd]">Authenticated Request</h4>
+                        <p class="text-gray-400">The agent sends its request to the tool, including the token in the `Authorization: Bearer <TOKEN>` header.</p>
+                    </div>
+                </div>
+                <div class="flow-step">
+                    <div class="flow-number">4</div>
+                    <div>
+                        <h4 class="font-bold text-lg text-[#94d2bd]">Token Validation</h4>
+                        <p class="text-gray-400">Cloud Run's frontend intercepts the request, validates the token's signature, and confirms its `audience` matches the service URL.</p>
+                    </div>
+                </div>
+                <div class="flow-step">
+                    <div class="flow-number">5</div>
+                    <div>
+                        <h4 class="font-bold text-lg text-[#94d2bd]">IAM Authorization</h4>
+                        <p class="text-gray-400">Cloud Run checks if the agent's identity (from the token) has the required `run.invoker` permission in its IAM policy.</p>
+                    </div>
+                </div>
+                <div class="flow-step">
+                    <div class="flow-number" style="background-color: #ee9b00; border-color: #ca6702;">6</div>
+                    <div>
+                        <h4 class="font-bold text-lg text-[#ee9b00]">Access Granted/Denied</h4>
+                        <p class="text-gray-400">If all checks pass, the request proceeds. If not, Cloud Run returns a `403 Forbidden` error, and the tool is never reached.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="mb-16">
+            <h2 class="text-3xl font-bold text-center mb-4 text-[#94d2bd]">Identity & The Principle of Least Privilege</h2>
+            <p class="text-center max-w-2xl mx-auto text-gray-400 mb-12">Security isn't just about who gets in; it's about granting them the absolute minimum permissions required. Overly broad roles create unnecessary risk.</p>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-8 items-stretch">
+                <div class="bg-gray-800 rounded-lg shadow-lg p-6 flex flex-col">
+                    <h3 class="text-xl font-bold text-center mb-4 text-[#94d2bd]">Choose the Right Key, Not the Whole Bunch</h3>
+                    <p class="text-center text-sm text-gray-500 mb-6">The Principle of Least Privilege means giving an identity only the permissions it needs.</p>
+                    <div class="flex-grow grid grid-cols-2 gap-4 items-center text-center">
+                        <div class="bg-gray-700 p-4 rounded-lg border-2 border-green-500 h-full flex flex-col justify-center">
+                            <span class="text-6xl">🔑</span>
+                            <h4 class="font-bold text-green-300 mt-2">Cloud Run Invoker</h4>
+                            <p class="text-4xl font-black text-white">1</p>
+                            <p class="text-sm text-gray-400">Permission</p>
+                        </div>
+                        <div class="bg-gray-700 p-4 rounded-lg border-2 border-red-500 h-full flex flex-col justify-center">
+                            <span class="text-6xl">🤯</span>
+                            <h4 class="font-bold text-red-400 mt-2">Project Editor</h4>
+                            <p class="text-4xl font-black text-white">2000+</p>
+                            <p class="text-sm text-gray-400">Permissions</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="bg-gray-800 rounded-lg shadow-lg p-6 text-center">
+                    <h3 class="text-xl font-bold mb-4 text-[#94d2bd]">Best Practice: IAM Bindings</h3>
+                    <p class="text-gray-400 mb-6">Create explicit, auditable identities and grant them minimal roles on specific resources.</p>
+                    <div class="space-y-2">
+                        <div class="p-4 bg-gray-700 rounded-lg border-2 border-dashed border-gray-600">
+                             <div class="text-3xl">🧑‍💻</div>
+                             <p class="font-bold text-gray-200">Developer / CI/CD Pipeline</p>
+                        </div>
+                        <div class="iam-diagram-arrow">Has roles like 'Service Account User' & 'Agent Admin' to deploy resources</div>
+                        <div class="p-4 bg-gray-700 rounded-lg border-2 border-dashed border-gray-600">
+                             <div class="text-3xl">🤖</div>
+                            <p class="font-bold text-gray-200">ADK Agent's Dedicated Service Account</p>
+                        </div>
+                        <div class="iam-diagram-arrow">Is granted ONE specific role on the tool</div>
+                        <div class="p-4 bg-gray-700 rounded-lg border-2 border-dashed border-gray-600">
+                             <div class="iam-role-box">roles/run.invoker</div>
+                             <div class="text-3xl mt-2">🛡️</div>
+                            <p class="font-bold text-[#ee9b00]">The Protected Cloud Run Tool</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+        
+        <section class="mb-16">
+            <h2 class="text-3xl font-bold text-center mb-4 text-[#94d2bd]">Building the Network Fortress</h2>
+             <p class="text-center max-w-2xl mx-auto text-gray-400 mb-12">Identity is the first line of defense. A private network is the second. By isolating services from the public internet, we create a hardened perimeter.</p>
+            <div class="bg-gray-800 rounded-lg shadow-2xl p-6 md:p-10">
+                <div class="grid grid-cols-1 md:grid-cols-5 gap-8 items-center">
+                    <div class="md:col-span-2 space-y-4">
+                        <h3 class="text-2xl font-bold text-[#94d2bd]">A Defense-in-Depth Strategy</h3>
+                        <p class="text-gray-400">This multi-layered approach ensures that even if one layer is misconfigured, others provide backup protection. Traffic is forced onto a secure, private path from start to finish.</p>
+                    </div>
+                    <div class="md:col-span-3 space-y-6">
+                        <div class="flex items-center p-4 bg-gray-700 rounded-lg border-l-4 border-[#94d2bd]">
+                            <span class="text-3xl mr-4">1️⃣</span>
+                            <div>
+                                <h4 class="font-bold text-[#94d2bd]">Lock Down the Target: Internal Ingress</h4>
+                                <p class="text-sm text-gray-400">Set Cloud Run ingress to `internal` to reject all public internet traffic.</p>
+                            </div>
+                        </div>
+                        <div class="flex items-center p-4 bg-gray-700 rounded-lg border-l-4 border-[#0a9396]">
+                            <span class="text-3xl mr-4">2️⃣</span>
+                            <div>
+                                <h4 class="font-bold text-[#0a9396]">Create a Private Path: VPC Egress</h4>
+                                <p class="text-sm text-gray-400">Configure the Agent Engine for VPC egress so its traffic comes from a private source.</p>
+                            </div>
+                        </div>
+                        <div class="flex items-center p-4 bg-gray-700 rounded-lg border-l-4 border-[#005f73]">
+                            <span class="text-3xl mr-4">3️⃣</span>
+                            <div>
+                                <h4 class="font-bold text-[#005f73]">Ensure Connectivity: Private Google Access</h4>
+                                <p class="text-sm text-gray-400">Enable Private Google Access on the subnet so the VPC can reach Google's internal service endpoints.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="mb-16">
+            <h2 class="text-3xl font-bold text-center mb-12 text-[#94d2bd]">Implementation Highlights</h2>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+                <div class="bg-gray-800 rounded-lg shadow-lg p-6 border-t-4 border-[#94d2bd]">
+                    <h3 class="text-xl font-bold text-[#94d2bd] mb-2">Authenticated Call</h3>
+                    <p class="text-gray-400 mb-4">In the agent's Python code, explicitly fetching a token with the correct `audience` is the most critical step for security.</p>
+                    <pre class="bg-gray-900 text-sm p-3 rounded-md text-gray-300"><code>id_token.fetch_id_token(
+  auth_req, 
+  <span class="font-bold text-[#ae2012]">MCP_TOOLBOX_URL</span>
+)</code></pre>
+                </div>
+                <div class="bg-gray-800 rounded-lg shadow-lg p-6 border-t-4 border-[#ee9b00]">
+                    <h3 class="text-xl font-bold text-[#ee9b00] mb-2">Secure Deployment</h3>
+                    <p class="text-gray-400 mb-4">When deploying the Cloud Run tool, locking down ingress is a simple but powerful command-line flag.</p>
+                     <pre class="bg-gray-900 text-sm p-3 rounded-md text-gray-300"><code>gcloud run deploy ... \
+  <span class="font-bold text-[#ae2012]">--ingress=internal</span></code></pre>
+                </div>
+                <div class="bg-gray-800 rounded-lg shadow-lg p-6 border-t-4 border-[#0a9396]">
+                    <h3 class="text-xl font-bold text-[#0a9396] mb-2">Assigning Identity</h3>
+                    <p class="text-gray-400 mb-4">When creating the agent, you must attach the dedicated service account you created to act as its identity.</p>
+                     <pre class="bg-gray-900 text-sm p-3 rounded-md text-gray-300"><code>ReasoningEngine.create(
+  ...,
+  <span class="font-bold text-[#ae2012]">service_account=...</span>
+)</code></pre>
+                </div>
+            </div>
+        </section>
+
+        <section class="bg-gray-800 rounded-lg shadow-2xl p-6 md:p-10">
+             <h2 class="text-3xl font-bold text-center mb-12 text-[#94d2bd]">Implementation Verification Checklist</h2>
+             <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                 <div class="flex items-start p-4 bg-gray-700 rounded-lg">
+                    <span class="text-3xl mr-4">🎯</span>
+                    <div>
+                        <h4 class="font-bold text-gray-200">1. Cloud Run Service</h4>
+                        <p class="text-sm text-gray-400">Is the service deployed successfully with `ingress: internal`?</p>
+                    </div>
+                 </div>
+                 <div class="flex items-start p-4 bg-gray-700 rounded-lg">
+                    <span class="text-3xl mr-4">🔑</span>
+                    <div>
+                        <h4 class="font-bold text-gray-200">2. IAM Policy</h4>
+                        <p class="text-sm text-gray-400">Does the agent's service account have the `Cloud Run Invoker` role on the service?</p>
+                    </div>
+                 </div>
+                 <div class="flex items-start p-4 bg-gray-700 rounded-lg">
+                    <span class="text-3xl mr-4">🤖</span>
+                    <div>
+                        <h4 class="font-bold text-gray-200">3. Agent Deployment</h4>
+                        <p class="text-sm text-gray-400">Is the agent running with the correct user-managed service account?</p>
+                    </div>
+                 </div>
+                 <div class="flex items-start p-4 bg-gray-700 rounded-lg">
+                    <span class="text-3xl mr-4">🏷️</span>
+                    <div>
+                        <h4 class="font-bold text-gray-200">4. Token Claims</h4>
+                        <p class="text-sm text-gray-400">Does the generated ID token have the correct `audience` and `issuer`?</p>
+                    </div>
+                 </div>
+                 <div class="flex items-start p-4 bg-gray-700 rounded-lg">
+                    <span class="text-3xl mr-4">🌐</span>
+                    <div>
+                        <h4 class="font-bold text-gray-200">5. Network Path</h4>
+                        <p class="text-sm text-gray-400">Is VPC Egress configured for the agent and Private Google Access enabled?</p>
+                    </div>
+                 </div>
+                  <div class="flex items-start p-4 bg-green-900 bg-opacity-30 rounded-lg border border-green-500">
+                    <span class="text-3xl mr-4">✅</span>
+                    <div>
+                        <h4 class="font-bold text-green-300">All Checks Pass</h4>
+                        <p class="text-sm text-green-400">Congratulations, you have a secure, production-grade connection!</p>
+                    </div>
+                 </div>
+             </div>
+        </section>
+
+    </main>
+    <script>
+        // No chart.js script needed for this version.
+    </script>
+</body>
+</html>
