@@ -5,5 +5,6 @@ This repository hosts a collection of articles, tutorials, and thoughts by Dave 
 Explore the latest entries:
 - [Beyond Localhost: A Visual Guide to Secure ADK & Cloud Run Authentication on GCP](BeyondLocalhost.html)
 - [FastFabric: A guide to deploying applications with FastFabric](FastFabric.html)
+- [Warhammer Old World: An interactive guide on how to start playing Warhammer the old world](old-world.html)
 
 Connect with Dave on [LinkedIn](https://www.linkedin.com/in/davegulli).
