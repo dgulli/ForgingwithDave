@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Warhammer: The Old World - Interactive Turn Sequence</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700;900&family=Lato:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Lato', sans-serif;
+            background-color: #2c241b;
+            background-image: url("https://www.transparenttextures.com/patterns/aged-paper.png");
+            overflow: hidden; /* Full screen immersive */
+        }
+        h1, h2, h3, h4, .cinzel {
+            font-family: 'Cinzel', serif;
+        }
+        .parchment {
+            background-color: #f3e5ab;
+            background-image: url("https://www.transparenttextures.com/patterns/aged-paper.png");
+            box-shadow: inset 0 0 40px rgba(0,0,0,0.1);
+        }
+        .wood-border {
+            border: 4px solid #5d4037;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.5);
+        }
+        .btn-retro {
+            background: linear-gradient(to bottom, #8d6e63, #5d4037);
+            border: 2px solid #3e2723;
+            color: #f3e5ab;
+            text-shadow: 1px 1px 0 #000;
+            transition: transform 0.1s, filter 0.2s;
+        }
+        .btn-retro:active {
+            transform: translateY(2px);
+            filter: brightness(0.9);
+        }
+        .phase-enter {
+            animation: fadeIn 0.5s ease-out;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes spellCast {
+            0% { transform: scale(0); opacity: 0; }
+            50% { opacity: 1; }
+            100% { transform: scale(1.5); opacity: 0; }
+        }
+        .spell-effect {
+            animation: spellCast 0.8s ease-out forwards;
+        }
+        @keyframes arrowFly {
+            0% { left: 10%; opacity: 1; }
+            90% { left: 80%; opacity: 1; }
+            100% { left: 85%; opacity: 0; }
+        }
+        .arrow-anim {
+            position: absolute;
+            animation: arrowFly 0.6s linear forwards;
+        }
+        @keyframes shake {
+            0% { transform: translate(1px, 1px) rotate(0deg); }
+            10% { transform: translate(-1px, -2px) rotate(-1deg); }
+            20% { transform: translate(-3px, 0px) rotate(1deg); }
+            30% { transform: translate(3px, 2px) rotate(0deg); }
+            40% { transform: translate(1px, -1px) rotate(1deg); }
+            50% { transform: translate(-1px, 2px) rotate(-1deg); }
+            60% { transform: translate(-3px, 1px) rotate(0deg); }
+            70% { transform: translate(3px, 1px) rotate(-1deg); }
+            80% { transform: translate(-1px, -1px) rotate(1deg); }
+            90% { transform: translate(1px, 2px) rotate(0deg); }
+            100% { transform: translate(1px, -2px) rotate(-1deg); }
+        }
+        .shake {
+            animation: shake 0.5s;
+        }
+        /* Custom Scrollbar for content areas */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #d7cbb6; 
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #5d4037; 
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef } = React;
+
+        // Icons using SVG paths directly for simplicity in a single file
+        const Icons = {
+            Strategy: () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2a10 10 0 1 0 10 10H12V2z"/><path d="M12 12 2.1 10.5M12 12 4.93 21.07M12 12 19.07 4.93"/><path d="m21.9 2.1-2.8 2.8"/><path d="m2 22 2.8-2.8"/></svg>,
+            Movement: () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg>,
+            Shooting: () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2c5.52 0 10 4.48 10 10s-4.48 10-10 10S2 17.52 2 12 6.48 2 12 2zm0 18c4.41 0 8-3.59 8-8s-3.59-8-8-8-8 3.59-8 8 3.59 8 8 8z"/><circle cx="12" cy="12" r="3"/><path d="M12 8v8"/><path d="M8 12h8"/></svg>,
+            Combat: () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14.5 17.5 3 6V3h3l11.5 11.5"/><path d="m13 19 6-6"/><path d="M16 16 7 25"/><path d="M23 21v3h-3l-9-9"/><path d="m22 2-9 9"/></svg>,
+            Book: () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20"/></svg>,
+            Magic: () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/><path d="M5 3v4"/><path d="M9 3v4"/><path d="M2 7h10"/></svg>,
+            Info: () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
+        };
+
+        const phases = [
+            {
+                id: 0,
+                name: "Strategy Phase",
+                color: "blue",
+                bg: "bg-blue-900",
+                lightBg: "bg-blue-50",
+                icon: Icons.Strategy,
+                desc: "The general's planning time. There is no dedicated 'Magic Phase' anymore! Wizards act here to buff allies or hex enemies.",
+                subphases: ["Start of Turn", "Command (Abilities)", "Conjuration (Buffs/Hexes)", "Rally Fleeing Troops"]
+            },
+            {
+                id: 1,
+                name: "Movement Phase",
+                color: "green",
+                bg: "bg-green-900",
+                lightBg: "bg-green-50",
+                icon: Icons.Movement,
+                desc: "The most critical phase. Games are won or lost by positioning. Wizards cast 'Conveyance' spells (teleports) here.",
+                subphases: ["Declare Charges", "Charge Moves", "Compulsory Moves", "Remaining Moves"]
+            },
+            {
+                id: 2,
+                name: "Shooting Phase",
+                color: "amber",
+                bg: "bg-amber-700",
+                lightBg: "bg-amber-50",
+                icon: Icons.Shooting,
+                desc: "Rain death from afar. War machines fire, archers loose volleys, and Wizards cast Magic Missiles.",
+                subphases: ["Fire Missile Weapons", "Fire War Machines", "Cast Magic Missiles", "Resolve Panic"]
+            },
+            {
+                id: 3,
+                name: "Combat Phase",
+                color: "red",
+                bg: "bg-red-900",
+                lightBg: "bg-red-50",
+                icon: Icons.Combat,
+                desc: "Steel meets steel. Wizards use 'Assailment' spells in melee. Initiative determines strike order.",
+                subphases: ["Choose Combat", "Calculate Initiative", "Roll to Hit/Wound", "Combat Resolution"]
+            }
+        ];
+
+        const StatExplanation = ({ stat, name, desc }) => (
+            <div className="flex flex-col p-2 border-b border-stone-300 last:border-0 hover:bg-stone-200 transition-colors cursor-help group relative">
+                <div className="flex justify-between items-center">
+                    <span className="font-bold font-mono text-lg w-10 text-center bg-stone-800 text-stone-100 rounded">{stat}</span>
+                    <span className="cinzel font-bold text-stone-800 flex-1 ml-3">{name}</span>
+                </div>
+                <div className="text-xs text-stone-600 mt-1 italic">{desc}</div>
+            </div>
+        );
+
+        const StatModal = ({ isOpen, onClose }) => {
+            if (!isOpen) return null;
+            return (
+                <div className="fixed inset-0 bg-black bg-opacity-70 z-50 flex items-center justify-center p-4" onClick={onClose}>
+                    <div className="parchment rounded-lg max-w-md w-full max-h-[90vh] overflow-y-auto border-4 border-stone-800 relative shadow-2xl" onClick={e => e.stopPropagation()}>
+                        <button onClick={onClose} className="absolute top-2 right-2 text-stone-800 hover:text-red-700 font-bold text-xl">✕</button>
+                        <div className="p-6">
+                            <h2 className="text-2xl cinzel font-bold text-center mb-4 border-b-2 border-stone-800 pb-2">Unit Profile Decoder</h2>
+                            <div className="bg-stone-800 text-stone-100 p-3 rounded mb-4 font-mono text-sm grid grid-cols-9 gap-1 text-center">
+                                <div>M</div><div>WS</div><div>BS</div><div>S</div><div>T</div><div>W</div><div>I</div><div>A</div><div>Ld</div>
+                                <div>4</div><div>3</div><div>3</div><div>3</div><div>3</div><div>1</div><div>3</div><div>1</div><div>7</div>
+                            </div>
+                            <div className="space-y-1">
+                                <StatExplanation stat="M" name="Movement" desc="Speed in inches. How far the unit moves." />
+                                <StatExplanation stat="WS" name="Weapon Skill" desc="Melee skill. Compare vs enemy WS to see result needed to Hit." />
+                                <StatExplanation stat="BS" name="Ballistic Skill" desc="Ranged skill. Determines roll needed to Hit with shooting." />
+                                <StatExplanation stat="S" name="Strength" desc="Power of attacks. Compare vs enemy Toughness to Wound." />
+                                <StatExplanation stat="T" name="Toughness" desc="Durability. Higher T makes it harder to be Wounded." />
+                                <StatExplanation stat="W" name="Wounds" desc="Health points. If this reaches 0, the model is removed." />
+                                <StatExplanation stat="I" name="Initiative" desc="Speed of reflexes. Higher Initiative strikes first in combat." />
+                                <StatExplanation stat="A" name="Attacks" desc="Number of dice rolled when fighting in melee." />
+                                <StatExplanation stat="Ld" name="Leadership" desc="Bravery. Used for Panic, Fear, and Break tests." />
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        const StrategyGame = () => {
+            const [casted, setCasted] = useState(false);
+            const [roll, setRoll] = useState(null);
+            
+            const castSpell = () => {
+                const r1 = Math.floor(Math.random() * 6) + 1;
+                const r2 = Math.floor(Math.random() * 6) + 1;
+                setRoll(r1 + r2);
+                setCasted(true);
+                setTimeout(() => setCasted(false), 2000);
+            };
+
+            return (
+                <div className="flex flex-col items-center justify-center h-full space-y-6 text-center">
+                    <div className="relative">
+                        <div className={`text-6xl mb-4 transition-transform duration-500 ${casted ? 'scale-110' : 'scale-100'}`}>🧙‍♂️</div>
+                        {casted && <div className="absolute top-0 left-0 right-0 bottom-0 flex items-center justify-center pointer-events-none">
+                            <div className="text-4xl text-blue-500 font-bold spell-effect">✨ +1 Toughness! ✨</div>
+                        </div>}
+                    </div>
+                    
+                    <div className="bg-white bg-opacity-50 p-4 rounded-lg border border-blue-300">
+                        <p className="mb-2 font-bold text-blue-900">Action: Conjuration Sub-phase</p>
+                        <p className="text-sm mb-4">Attempt to cast "Shield of Saphery" (Value 7+)</p>
+                        <button onClick={castSpell} className="btn-retro px-8 py-3 rounded text-xl cinzel shadow-lg hover:scale-105 active:scale-95 transition-transform">
+                            Cast Enchantment
+                        </button>
+                    </div>
+
+                    {roll && (
+                        <div className="text-2xl font-bold cinzel mt-4">
+                            Roll: <span className={roll >= 7 ? "text-green-600" : "text-red-600"}>{roll}</span> 
+                            {roll >= 7 ? " - Success!" : " - Failed!"}
+                        </div>
+                    )}
+                    
+                    <div className="mt-8 text-xs text-stone-500 max-w-md bg-stone-100 p-2 rounded border border-stone-300">
+                        <strong className="block text-stone-800">☝️ Important Rule:</strong>
+                        There is no "Magic Phase". This Wizard is casting an Enchantment (Buff) in the Strategy Phase. If they wanted to cast a Fireball (Magic Missile), they would wait for the Shooting Phase!
+                    </div>
+                </div>
+            );
+        };
+
+        const MovementGame = () => {
+            const [position, setPosition] = useState(0);
+            const [charging, setCharging] = useState(false);
+            const containerRef = useRef(null);
+
+            const moveUnit = () => {
+                if (charging) return;
+                setCharging(true);
+                // Simulate charge distance
+                const distance = Math.floor(Math.random() * 30) + 50; 
+                const newPos = Math.min(position + distance, 80);
+                
+                setTimeout(() => {
+                    setPosition(newPos);
+                    setCharging(false);
+                }, 500);
+            };
+
+            const reset = () => setPosition(0);
+
+            return (
+                <div className="flex flex-col items-center justify-center h-full w-full px-4">
+                    <div className="w-full max-w-2xl h-32 bg-green-200 border-2 border-green-800 relative rounded overflow-hidden shadow-inner mb-6" ref={containerRef}>
+                        {/* Terrain */}
+                        <div className="absolute top-4 right-10 text-4xl">🏰</div>
+                        <div className="absolute top-10 right-20 text-xs font-bold text-stone-600">Enemy</div>
+                        
+                        {/* Unit */}
+                        <div 
+                            className="absolute bottom-2 text-5xl transition-all duration-700 ease-in-out cursor-pointer"
+                            style={{ left: `${position}%` }}
+                            onClick={moveUnit}
+                        >
+                            🐎
+                            <div className="text-xs font-bold text-center -mt-1 bg-white bg-opacity-80 rounded px-1">Knights</div>
+                        </div>
+
+                        {/* Measuring Tape visual */}
+                        {charging && (
+                            <div className="absolute bottom-8 left-0 h-1 bg-red-600 animate-pulse" style={{ width: `${position + 20}%`, transition: 'width 0.5s' }}></div>
+                        )}
+                    </div>
+
+                    <div className="flex gap-4">
+                        <button onClick={moveUnit} disabled={position > 70} className="btn-retro px-6 py-2 rounded text-lg cinzel disabled:opacity-50">
+                            Declare Charge
+                        </button>
+                        <button onClick={reset} className="bg-stone-300 hover:bg-stone-400 text-stone-800 px-4 py-2 rounded font-bold border border-stone-500 shadow-sm">
+                            Reset
+                        </button>
+                    </div>
+
+                    <div className="mt-4 text-center">
+                        <p className="text-green-900 font-bold">Current State: {position > 70 ? "In Combat!" : position > 0 ? "Moving..." : "Ready"}</p>
+                    </div>
+                    
+                    <div className="mt-6 text-sm text-stone-600 max-w-md text-center bg-white bg-opacity-60 p-3 rounded">
+                        <strong>Movement Stat (M):</strong> Used here. A charge move is usually M + 2D6 inches. Getting this right is how you win games!
+                    </div>
+                </div>
+            );
+        };
+
+        const ShootingGame = () => {
+            const [arrows, setArrows] = useState([]);
+            const [hits, setHits] = useState(null);
+
+            const fire = () => {
+                // Spawn arrows
+                const newArrows = [1, 2, 3].map(i => ({ id: Date.now() + i, top: 20 + i * 20 }));
+                setArrows(newArrows);
+
+                // Calculate Hits based on BS 3 (4+ to hit)
+                const rolls = [1,2,3].map(() => Math.floor(Math.random() * 6) + 1);
+                const hitCount = rolls.filter(r => r >= 4).length;
+
+                setTimeout(() => {
+                    setHits(hitCount);
+                    setArrows([]);
+                }, 600);
+            };
+
+            return (
+                <div className="flex flex-col items-center justify-center h-full w-full relative overflow-hidden">
+                    {/* Battle Scene */}
+                    <div className="flex justify-between w-full max-w-3xl items-center mb-10 px-10">
+                        <div className="flex flex-col items-center">
+                            <span className="text-6xl relative z-10">🏹</span>
+                            <span className="font-bold bg-amber-200 px-2 rounded mt-2 border border-amber-600">Archers (BS 3)</span>
+                        </div>
+                        <div className="flex flex-col items-center">
+                            <span className={`text-6xl transition-transform ${hits > 0 ? 'shake text-red-600' : ''}`}>👹</span>
+                            <span className="font-bold bg-stone-300 px-2 rounded mt-2 border border-stone-600">Orcs</span>
+                        </div>
+                    </div>
+
+                    {/* Animated Arrows */}
+                    {arrows.map(a => (
+                        <div key={a.id} className="arrow-anim text-2xl absolute" style={{ top: `calc(30% + ${a.top}px)` }}>
+                            ➢
+                        </div>
+                    ))}
+
+                    <button onClick={fire} className="btn-retro px-8 py-3 rounded text-xl cinzel shadow-lg z-20">
+                        Volley Fire!
+                    </button>
+
+                    {hits !== null && (
+                        <div className="mt-6 bg-white border-2 border-amber-600 p-4 rounded shadow-lg z-20 animate-bounce">
+                            <h3 className="cinzel font-bold text-xl text-amber-900">Result</h3>
+                            <p>Ballistic Skill 3 needs 4+ to hit.</p>
+                            <p className="text-2xl font-bold">{hits} Hits!</p>
+             
